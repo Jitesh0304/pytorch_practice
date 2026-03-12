@@ -9,6 +9,8 @@ import torch.nn.functional as F
 from torch.optim import Adam
 from torch.amp.grad_scaler import GradScaler
 from torch.amp import autocast
+import random
+import numpy as np
 
 
 torch.cuda.empty_cache()
@@ -24,11 +26,71 @@ IMAGE_TRAIN_FOLDER_PATH = r"C:\Users\jites\Downloads\archive\yolo_data_sindhi_la
 LABEL_TRAIN_FOLDER_PATH = r"C:\Users\jites\Downloads\archive\yolo_data_sindhi_label\labels\training"
 IMAGE_VAL_FOLDER_PATH = r"C:\Users\jites\Downloads\archive\yolo_data_sindhi_label\images\val"
 LABEL_VAL_FOLDER_PATH = r"C:\Users\jites\Downloads\archive\yolo_data_sindhi_label\labels\val"
-GRID_SIZE = 20   # 6
+GRID_SIZE = 20
 
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+
+def horizontal_flip(img, boxes):
+
+    if random.random() < 0.5:
+        img = np.fliplr(img).copy()
+        boxes[:,1] = 1 - boxes[:,1]
+
+    return img, boxes
+
+
+
+def color_jitter(img):
+
+    if random.random() < 0.5:
+        alpha = 1 + random.uniform(-0.3,0.3)
+        beta = random.uniform(-0.1,0.1)
+
+        img = img * alpha + beta
+        img = np.clip(img,0,1)
+
+    return img
+
+
+
+def random_scale(img, boxes):
+
+    scale = random.uniform(0.8,1.2)
+    h,w = img.shape[:2]
+
+    new_w = int(w*scale)
+    new_h = int(h*scale)
+
+    img = cv2.resize(img,(new_w,new_h))
+    img = cv2.resize(img,(w,h))
+
+    boxes[:,3] *= scale
+    boxes[:,4] *= scale
+
+    boxes[:,3] = boxes[:,3].clip(0,1)
+    boxes[:,4] = boxes[:,4].clip(0,1)
+
+    return img, boxes
+
+
+
+def random_translate(img, boxes):
+
+    if random.random() < 0.5:
+        tx = random.uniform(-0.1,0.1)
+        ty = random.uniform(-0.1,0.1)
+
+        boxes[:,1] += tx
+        boxes[:,2] += ty
+
+        boxes[:,1] = boxes[:,1].clip(0,1)
+        boxes[:,2] = boxes[:,2].clip(0,1)
+
+    return img, boxes
 
 
 class ImageDataset(Dataset):
@@ -50,21 +112,28 @@ class ImageDataset(Dataset):
         img = cv2.imread(img_path)
         img = cv2.resize(img, (self.img_w, self.img_h))
         img = img / 255     # bring RGB values < 1
-        img = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1)  # (3, 320, 320) pytorch model format
 
         label_path = os.path.join(self.label_folder, image_name.replace('.jpg', '.txt'))
         boxes = []
         with open(label_path, 'r') as f:
-            lines = f.readline()
-            # print(lines)
-            # for line in lines:
-            #     cls_id, center_x, center_y, w, h = map(float, line.split())
-            #     boxes.append([cls_id, center_x, center_y, w, h])
-            cls_id, center_x, center_y, w, h = map(float, lines.split())
-            cls_id = 0.0 if cls_id == 5.0 else cls_id
-            boxes.append([cls_id, center_x, center_y, w, h])
+            # lines = f.readline()
+            # cls_id, center_x, center_y, w, h = map(float, lines.split())
+            # cls_id = 0.0 if cls_id == 5.0 else cls_id
+
+            for line in f.readlines():
+                cls_id, center_x, center_y, w, h = map(float, line.split())
+                cls_id = 0.0 if cls_id == 5.0 else cls_id
+                boxes.append([cls_id, center_x, center_y, w, h])
 
         boxes = torch.tensor(boxes, dtype=torch.float32)
+
+        boxes = boxes.numpy()
+        img, boxes = horizontal_flip(img, boxes)
+        img = color_jitter(img)
+        img, boxes = random_translate(img, boxes)
+        img = torch.tensor(img, dtype=torch.float32).permute(2, 0, 1)  # (3, 320, 320) pytorch model format
+        boxes = torch.tensor(boxes, dtype=torch.float32)
+
         return img, boxes
 
 
@@ -85,72 +154,51 @@ def collate_fn(batch):
 
 class DetectionModel(nn.Module):
 
-    def __init__(self, num_classes, grid_size):     # grid_size means the image will devided into 8 * 8 grid
+    def __init__(self, num_classes, grid_size):
+
         super().__init__()
 
         self.num_classes = num_classes
         self.grid_size = grid_size
 
-        self.feature =nn.Sequential(
+        self.feature = nn.Sequential(
             # (B, 3, 320, 320)
-            nn.Conv2d(in_channels = 3, out_channels = 16, kernel_size = 3, stride = 1, padding = 1, dtype=torch.float32),
-            # ((W - K + 2p)/S) + 1
-            # ((320 - 3 + 2*1)/1) + 1 = 320
-            # (B, 16, 320, 320)
-            nn.ReLU(),  # Size will not change
-            nn.MaxPool2d(kernel_size = 2),  # o/p size will be (B, 16, 160, 160)
-            
-            nn.Conv2d(in_channels = 16, out_channels = 32, kernel_size = 3, stride = 1, padding = 1, dtype=torch.float32),
-            # ((W - K + 2p)/S) + 1
-            # ((160 - 3 + 2*1)/1) + 1 = 160
-            # (B, 32, 160, 160)
-            nn.ReLU(),  # Size will not change
-            nn.MaxPool2d(kernel_size = 2),  # o/p size will be (B, 32, 80, 80)
-            # nn.Dropout2d(0.15),
-            nn.Conv2d(in_channels = 32, out_channels = 64, kernel_size = 3, stride = 1, padding = 1, dtype=torch.float32),
-            # ((W - K + 2p)/S) + 1
-            # ((80 - 3 + 2*1)/1) + 1 = 80
-            # (B, 64, 80, 80)
-            nn.ReLU(),  # Size will not change
-            nn.MaxPool2d(kernel_size = 2),  # o/p size will be (B, 64, 40, 40)
-            # nn.Dropout2d(0.15),
-            nn.Conv2d(in_channels = 64, out_channels = 128, kernel_size = 3, stride = 1, padding = 1, dtype=torch.float32),
-            # ((W - K + 2p)/S) + 1
-            # ((40 - 3 + 2*1)/1) + 1 = 40
-            # (B, 128, 40, 40)
-            nn.ReLU(),  # Size will not change
-            nn.MaxPool2d(kernel_size = 2),  # o/p size will be (B, 128, 20, 20)
+            nn.Conv2d(3,32,3,padding=1),    # (B, 32, 320, 320)
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.MaxPool2d(2),                # o/p size will be (B, 32, 160, 160)
 
-                # forch output 
-            nn.AdaptiveAvgPool2d(output_size = (self.grid_size, self.grid_size))      # if grid size is 20
+            nn.Conv2d(32,64,3,padding=1),   # (B, 64, 160, 160)
+            nn.BatchNorm2d(64),
+            nn.ReLU(),
+            nn.MaxPool2d(2),                # (B, 64, 80, 80)
+
+            nn.Conv2d(64,128,3,padding=1),      # (B, 128, 80, 80)
+            nn.BatchNorm2d(128),
+            nn.ReLU(),
+            nn.MaxPool2d(2),                    # (B, 128, 40, 40)
+
+            nn.Conv2d(128,256,3,padding=1),     # (B, 256, 40, 40)
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.MaxPool2d(2),                    # (B, 256, 20, 20)
+
         )
 
-        self.detection = nn.Conv2d(
-            in_channels = 128,
-            # out_channels = grid_size * grid_size * (5 + num_classes),       
-            out_channels = 5 + num_classes,
+        self.detect = nn.Conv2d(                # (B, 256, 20, 20)
+            256,
+            5 + num_classes,
             kernel_size=1
-        )
-        
-    def forward(self, x):
-            # input (B, 3, 320, 320)
-        x = self.feature(x)     # output (B, 128, grid, grid)
-        x = self.detection(x)   # output (B, , 5 + C, grid, grid)
+        )                                       # (B, 5+C, 20, 20)
 
-        # B = x.shape[0]      # batch
-        # x = x.view(
-        #     B,
-        #     self.grid_size,
-        #     self.grid_size,
-        #     5 + self.num_classes
-        # )
-        x = x.permute(0,2,3,1)   # (B, grid, grid, 5 + C)
+    def forward(self,x):
 
-            # Apply sigmoid to:
-            # x,y offsets, objectness, classes
-        # x[..., 0:2] = torch.sigmoid(x[..., 0:2])
-        # x[..., 4:] = torch.sigmoid(x[..., 4:])
-
+        x = self.feature(x)
+        x = self.detect(x)
+        x = x.permute(0,2,3,1)
+        # stabilize bbox predictions
+        x[...,0:2] = torch.sigmoid(x[...,0:2])
+        x[...,2:4] = torch.sigmoid(x[...,2:4])
         return x
     
 
@@ -165,9 +213,15 @@ training_loader = DataLoader(dataset = training_img_dataset, shuffle = True, bat
 #     val_img, val_label = val_data
 
 model = DetectionModel(num_classes = 5, grid_size = GRID_SIZE).to(device)
-optimizer = Adam(params = model.parameters(), lr = 0.001)
+optimizer = Adam(params = model.parameters(), lr = 1e-4,  weight_decay= 1e-4)   # Weight Decay (L2 Regularization)
 
 scaler = GradScaler()
+
+scheduler = torch.optim.lr_scheduler.StepLR(
+    optimizer,
+    step_size=10,
+    gamma=0.5
+)
 
 
 def build_target(targets, num_classes, grid_size ):
@@ -204,50 +258,70 @@ def build_target(targets, num_classes, grid_size ):
 
 
 
-def calculate_loss(pred, target):
-    # (B, grid, grid, 5+num_classes)
-    new_target = build_target(targets = target, num_classes = 5, grid_size = GRID_SIZE).to(device)
+def calculate_loss(pred, targets):
 
-        # bring values between (0 to 1) for less loss
-    # pred[...,0:2] = torch.sigmoid(pred[...,0:2])  # x,y
-    # pred[...,2:4] = torch.sigmoid(pred[...,2:4])  # w,h
+    target = build_target(
+        targets = targets, num_classes = 5, grid_size = GRID_SIZE
+    ).to(device)
 
-        # [x_cell, y_cell, w, h, objectness, class_probs...]
-        # [x, y, w, h, obj, c1, c2, c3, c4, c5]
-    obj_mask = new_target[..., 4] == 1          # 1 (True)  → object exists (B, 20, 20)
-    noobj_mask = new_target[..., 4] == 0        # 0 (False) → background (B, 20, 20)
+    obj_mask = target[...,4] == 1
+    noobj_mask = target[...,4] == 0
 
-    # Box loss (MSE)
-    # Without this loss model would detect objects but box positions would be random
-    box_loss = F.mse_loss(                              # Actual (B, 20, 20, 4)
-        pred[..., 0:4][obj_mask],                       # After masking (Num_obj_cells, 4)
-        new_target[..., 0:4][obj_mask]
+    # -----------------------
+    # BOX LOSS
+    # -----------------------
+
+    pred_xy = pred[...,0:2][obj_mask]
+    target_xy = target[...,0:2][obj_mask]
+
+    pred_wh = pred[...,2:4][obj_mask]
+    target_wh = target[...,2:4][obj_mask]
+
+    box_loss = (
+        F.mse_loss(pred_xy, target_xy) +
+        F.mse_loss(
+            torch.sqrt(pred_wh + 1e-6),
+            torch.sqrt(target_wh + 1e-6)
+        )
     )
 
-        # Objectness loss (objectness)
-    # obj_loss = F.binary_cross_entropy(
-    #     pred[..., 4][obj_mask],
-    #     new_target[..., 4][obj_mask]
-    # )
-    obj_loss = F.binary_cross_entropy_with_logits(      # Actual (B, 20, 20)
-        pred[..., 4][obj_mask],                         # After masking (Num_obj_cells,)
-        new_target[..., 4][obj_mask]
+    # -----------------------
+    # OBJECT LOSS
+    # -----------------------
+
+    obj_loss = F.binary_cross_entropy_with_logits(
+        pred[...,4][obj_mask],
+        target[...,4][obj_mask]
     )
 
-    # background cells must predict confidence = 0
-    # Without this loss, model predicts objects everywhere
-    noobj_loss = F.binary_cross_entropy_with_logits(         # Actual (B, 20, 20)
-        pred[..., 4][noobj_mask],                            # After masking (Num_obj_cells,)
-        new_target[..., 4][noobj_mask]
+    # -----------------------
+    # NO OBJECT LOSS
+    # -----------------------
+
+    noobj_loss = F.binary_cross_entropy_with_logits(
+        pred[...,4][noobj_mask],
+        target[...,4][noobj_mask]
     )
 
-    # Class loss (Class predictions)
-    class_loss = F.binary_cross_entropy_with_logits(            # Actual (B, 20, 20, 5)
-        pred[..., 5:][obj_mask],                                # After masking (N_obj_cells, 5)
-        new_target[..., 5:][obj_mask]
+    # -----------------------
+    # CLASS LOSS
+    # -----------------------
+
+    class_loss = F.binary_cross_entropy_with_logits(
+        pred[...,5:][obj_mask],
+        target[...,5:][obj_mask]
     )
 
-    total_loss = box_loss + obj_loss + 0.5 * noobj_loss + class_loss
+    # -----------------------
+    # TOTAL LOSS
+    # -----------------------
+
+    total_loss = (
+        5 * box_loss +
+        obj_loss +
+        0.1 * noobj_loss +
+        class_loss
+    )
 
     return total_loss
 
@@ -285,6 +359,9 @@ def train_one_epoch():
         # Scaled Backward Pass
         scaler.scale(loss).backward()
 
+            # Detection models sometimes have exploding gradients. This improves stability.
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+
         # Optimizer Step (scaled)
         scaler.step(optimizer)
         scaler.update()
@@ -307,7 +384,7 @@ def start_training_process():
 
     val_img_dataset = ImageDataset(img_w = YOLO_IMG_WIDTH, img_h = YOLO_IMG_HEIGHT,
                             img_folder = IMAGE_VAL_FOLDER_PATH, label_folder = LABEL_VAL_FOLDER_PATH)
-    val_loader = DataLoader(dataset = val_img_dataset, shuffle = True, batch_size = BATCH_SIZE,
+    val_loader = DataLoader(dataset = val_img_dataset, shuffle = False, batch_size = BATCH_SIZE,
                             collate_fn=collate_fn)
 
 
@@ -340,6 +417,8 @@ def start_training_process():
 
                 running_loss += val_loss.item()
 
+        scheduler.step()
+        print("Current LR:", optimizer.param_groups[0]['lr'])
 
         avg_val_loss = running_loss / (i + 1)
         print("Loss train {} valid {}".format(avg_loss, avg_val_loss))
@@ -353,12 +432,13 @@ def start_training_process():
             torch.save(model.state_dict(), model_path)
         
         epoch_num += 1
+    torch.save(model.state_dict(), 'last_model.pt')
     return model_path
 
 
 
 
-def extract_boxes_from_prediction(pred, conf_threshold=0.01, grid_size=6):
+def extract_boxes_from_prediction(pred, conf_threshold=0.9, grid_size=6):
     boxes = []
     scores = []
     classes = []
@@ -440,7 +520,8 @@ def get_prediction(model_path):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-pt = start_training_process()
-get_prediction(pt)
-# get_prediction("path")
+# pt = start_training_process()
+# get_prediction(pt)
+
+get_prediction(r"C:\Users\jites\Desktop\Personal_projects\last_model")
 
