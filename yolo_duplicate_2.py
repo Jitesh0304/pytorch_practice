@@ -43,7 +43,7 @@ def horizontal_flip(img, boxes):
     return img, boxes
 
 
-
+# Random Brightness / Contrast
 def color_jitter(img):
 
     if random.random() < 0.5:
@@ -56,7 +56,7 @@ def color_jitter(img):
     return img
 
 
-
+# Helps with size variation. object appears smaller/larger
 def random_scale(img, boxes):
 
     scale = random.uniform(0.8,1.2)
