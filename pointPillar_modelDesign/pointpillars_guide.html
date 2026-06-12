@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PointPillars — Step by Step Guide</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181c24;
+    --border: #1e2330;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --accent3: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --green: #10b981;
+    --red: #f43f5e;
+    --code-bg: #0d1117;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* --- GRID BG --- */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* --- HEADER --- */
+  header {
+    position: relative;
+    z-index: 10;
+    padding: 48px 40px 32px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+  }
+
+  .header-icon {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    flex-shrink: 0;
+    box-shadow: 0 0 30px rgba(0,229,255,0.2);
+  }
+
+  .header-text h1 {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(90deg, #fff 0%, var(--accent) 60%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .header-text p {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-top: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 300;
+  }
+
+  /* --- LAYOUT --- */
+  .container {
+    position: relative;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    min-height: calc(100vh - 120px);
+  }
+
+  /* --- SIDEBAR --- */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    position: sticky;
+    top: 0;
+    height: calc(100vh - 120px);
+    overflow-y: auto;
+  }
+
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .sidebar-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 0 20px 12px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-left: 2px solid transparent;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .nav-item:hover { background: var(--surface); color: var(--text); }
+  .nav-item.active {
+    color: var(--accent);
+    border-left-color: var(--accent);
+    background: rgba(0,229,255,0.05);
+  }
+
+  .nav-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    min-width: 26px;
+    text-align: center;
+  }
+
+  .nav-item.active .nav-num {
+    background: rgba(0,229,255,0.15);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* --- MAIN CONTENT --- */
+  .main {
+    padding: 0;
+    overflow-y: auto;
+    height: calc(100vh - 120px);
+  }
+
+  .main::-webkit-scrollbar { width: 4px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+  .main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .step-panel {
+    display: none;
+    padding: 36px 40px;
+    animation: fadeIn 0.3s ease;
+  }
+
+  .step-panel.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* --- STEP HEADER --- */
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .step-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    padding: 4px 12px;
+    border-radius: 100px;
+    color: #fff;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .step-title {
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+  }
+
+  /* --- CONCEPT BOX --- */
+  .concept-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+  }
+
+  .concept-box h3 {
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .concept-box p {
+    font-size: 0.92rem;
+    line-height: 1.7;
+    color: #94a3b8;
+  }
+
+  /* --- VISUAL DIAGRAM --- */
+  .diagram {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    overflow-x: auto;
+  }
+
+  .diagram-title {
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  /* --- CODE BLOCK --- */
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .code-lang {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--accent3);
+    letter-spacing: 1px;
+  }
+
+  .copy-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  pre {
+    padding: 20px;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.7;
+    color: #e2e8f0;
+  }
+
+  pre::-webkit-scrollbar { height: 4px; }
+  pre::-webkit-scrollbar-track { background: transparent; }
+  pre::-webkit-scrollbar-thumb { background: var(--border); }
+
+  /* Syntax highlight classes */
+  .kw { color: #c084fc; }
+  .fn { color: #60a5fa; }
+  .st { color: #a3e635; }
+  .cm { color: #475569; font-style: italic; }
+  .nm { color: #fb923c; }
+  .op { color: var(--accent); }
+
+  /* --- INFO CARDS --- */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    transition: border-color 0.2s;
+  }
+
+  .card:hover { border-color: var(--accent2); }
+
+  .card-icon { font-size: 1.4rem; margin-bottom: 8px; }
+  .card-title { font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; }
+  .card-desc { font-size: 0.75rem; color: var(--muted); line-height: 1.5; }
+
+  /* --- PIPELINE VIZ --- */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 28px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .pipe-step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    text-align: center;
+    min-width: 110px;
+    flex-shrink: 0;
+  }
+
+  .pipe-step.highlight {
+    border-color: var(--accent);
+    background: rgba(0,229,255,0.06);
+  }
+
+  .pipe-step .ps-icon { font-size: 1.3rem; margin-bottom: 4px; }
+  .pipe-step .ps-name { font-size: 0.72rem; font-weight: 600; }
+  .pipe-step .ps-dim { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: var(--accent3); margin-top: 3px; }
+
+  .pipe-arrow {
+    color: var(--muted);
+    font-size: 1.1rem;
+    padding: 0 6px;
+    flex-shrink: 0;
+  }
+
+  /* --- ALERT BOX --- */
+  .alert {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 0.85rem;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .alert.tip   { background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3); }
+  .alert.warn  { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.3); }
+  .alert.info  { background: rgba(0,229,255,0.06); border: 1px solid rgba(0,229,255,0.2); }
+
+  .alert-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+  .alert p { line-height: 1.6; color: #94a3b8; }
+  .alert strong { color: var(--text); }
+
+  /* --- NAV BUTTONS --- */
+  .step-nav {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 36px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+  }
+
+  .nav-btn {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 10px 22px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .nav-btn.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+  .nav-btn.primary:hover { background: #00b8cc; border-color: #00b8cc; color: #000; }
+  .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* --- SECTION TITLE --- */
+  h2.section {
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 14px;
+    margin-top: 28px;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  h2.section::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 16px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+
+  /* --- TABLE --- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+    font-size: 0.82rem;
+  }
+
+  th {
+    background: var(--surface2);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: #94a3b8;
+    line-height: 1.5;
+  }
+
+  td:first-child { color: var(--accent3); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; }
+
+  tr:hover td { background: var(--surface); }
+
+  /* Progress */
+  .progress-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .progress-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  .progress-track {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  .progress-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    color: var(--accent);
+  }
+
+  @media (max-width: 768px) {
+    .container { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    header { padding: 24px 20px; }
+    .step-panel { padding: 24px 20px; }
+    .pipeline { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-icon">🧊</div>
+  <div class="header-text">
+    <h1>PointPillars — Complete Training Guide</h1>
+    <p>dataset → dataloader → model → loss → prediction // beginner-friendly</p>
+  </div>
+</header>
+
+<div class="progress-bar-container">
+  <span class="progress-label">PROGRESS</span>
+  <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:14.2%"></div></div>
+  <span class="progress-count" id="progressCount">1 / 7</span>
+</div>
+
+<div class="container">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-label">Steps</div>
+
+    <div class="nav-item active" onclick="goTo(0)">
+      <span class="nav-num">01</span> What is PointPillars?
+    </div>
+    <div class="nav-item" onclick="goTo(1)">
+      <span class="nav-num">02</span> Dataset Setup
+    </div>
+    <div class="nav-item" onclick="goTo(2)">
+      <span class="nav-num">03</span> DataLoader
+    </div>
+    <div class="nav-item" onclick="goTo(3)">
+      <span class="nav-num">04</span> Model Architecture
+    </div>
+    <div class="nav-item" onclick="goTo(4)">
+      <span class="nav-num">05</span> Loss Calculation
+    </div>
+    <div class="nav-item" onclick="goTo(5)">
+      <span class="nav-num">06</span> Training Loop
+    </div>
+    <div class="nav-item" onclick="goTo(6)">
+      <span class="nav-num">07</span> Prediction on New Data
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ===== STEP 0 ===== -->
+    <div class="step-panel active" id="step-0">
+      <div class="step-header">
+        <span class="step-badge">Step 01</span>
+        <h1 class="step-title">What is PointPillars?</h1>
+      </div>
+
+      <div class="concept-box">
+        <h3>🧠 The Core Idea</h3>
+        <p>Your LiDAR gives you a cloud of (X, Y, Z) points — just dots floating in 3D space. PointPillars converts these dots into vertical columns (pillars) standing on the ground, turns them into a 2D image-like grid, then uses a standard image detection network to find objects. Think of it like looking down at the scene from above.</p>
+      </div>
+
+      <h2 class="section">Why PointPillars?</h2>
+      <div class="cards">
+        <div class="card">
+          <div class="card-icon">⚡</div>
+          <div class="card-title">Very Fast</div>
+          <div class="card-desc">Runs in real-time (~60Hz) because it avoids 3D convolutions</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🎯</div>
+          <div class="card-title">Accurate</div>
+          <div class="card-desc">State-of-the-art on KITTI benchmark when it was published</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">📦</div>
+          <div class="card-title">Simple Structure</div>
+          <div class="card-desc">3 parts: pillar encoder → backbone → detection head</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🗺️</div>
+          <div class="card-title">Bird's Eye View</div>
+          <div class="card-desc">Outputs 2D BEV boxes, great for self-driving/robotics</div>
+        </div>
+      </div>
+
+      <h2 class="section">The Full Pipeline (Bird's Eye View)</h2>
+      <div class="pipeline">
+        <div class="pipe-step highlight">
+          <div class="ps-icon">📡</div>
+          <div class="ps-name">Raw PCD</div>
+          <div class="ps-dim">(921600, 3)</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="ps-icon">🗂️</div>
+          <div class="ps-name">Pillars</div>
+          <div class="ps-dim">(P, N, 9)</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="ps-icon">🧠</div>
+          <div class="ps-name">PillarNet</div>
+          <div class="ps-dim">(P, 64)</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="ps-icon">🗺️</div>
+          <div class="ps-name">BEV Map</div>
+          <div class="ps-dim">(64, H, W)</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="ps-icon">🏗️</div>
+          <div class="ps-name">Backbone</div>
+          <div class="ps-dim">CNN</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="ps-icon">📦</div>
+          <div class="ps-name">Boxes</div>
+          <div class="ps-dim">[x,y,z,l,w,h,θ]</div>
+        </div>
+      </div>
+
+      <div class="diagram">
+        <div class="diagram-title">📐 Pillar concept explained</div>
+        <pre style="padding:0; background:none; color:#94a3b8; font-size:0.75rem;">
+  Top-down view of the ground plane:
+  ┌────────────────────────────────────┐
+  │  · · ·  [car pillar]  · · · · · · │
+  │  · · · ┌─────┐ · · · · · · · · · │
+  │  · · · │█████│ · · [tree]· · · · │
+  │  · · · │█████│ · · ┌──┐ · · · · │
+  │  · · · └─────┘ · · │██│ · · · · │
+  │  · · · · · · · · · └──┘ · · · · │
+  └────────────────────────────────────┘
+
+  Each pillar = all LiDAR points that fall
+  within a (0.16m × 0.16m) grid cell.
+  The model learns features from each pillar.
+        </pre>
+      </div>
+
+      <div class="alert info">
+        <span class="alert-icon">ℹ️</span>
+        <p><strong>Your data shapes:</strong> You have 921,600 points → after pillaring, you'll have ~10,000–16,000 non-empty pillars, each with up to 32 points. This is how PointPillars handles your huge point cloud efficiently.</p>
+      </div>
+
+      <div class="step-nav">
+        <button class="nav-btn" disabled>← Previous</button>
+        <button class="nav-btn primary" onclick="goTo(1)">Dataset Setup →</button>
+      </div>
+    </div>
+
+    <!-- ===== STEP 1 ===== -->
+    <div class="step-panel" id="step-1">
+      <div class="step-header">
+        <span class="step-badge">Step 02</span>
+        <h1 class="step-title">Dataset Setup</h1>
+      </div>
+
+      <div class="concept-box">
+        <h3>🗂️ What we need</h3>
+        <p>We need to organise our files, parse the annotations into standard 7-DOF bounding boxes <code style="color:var(--accent3)">[cx, cy, cz, length, width, height, yaw]</code>, and write a PyTorch Dataset class that returns one sample at a time.</p>
+      </div>
+
+      <h2 class="section">Folder Structure</h2>
+      <div class="diagram">
+        <div class="diagram-title">📁 Recommended layout</div>
+        <pre style="padding:0; background:none; font-size:0.78rem; color:#94a3b8;">
+  dataset/
+  ├── pointclouds/
+  │   ├── scene_001.pcd
+  │   ├── scene_002.pcd
+  │   └── ...
+  ├── annotations/
+  │   ├── scene_001.json     ← list of objects in scene
+  │   ├── scene_002.json
+  │   └── ...
+  └── splits/
+      ├── train.txt          ← "scene_001\nscene_002\n..."
+      └── val.txt
+        </pre>
+      </div>
+
+      <h2 class="section">Annotation → 7-DOF Box</h2>
+      <div class="alert tip">
+        <span class="alert-icon">✅</span>
+        <p><strong>Your annotation</strong> already has center3D, size3D, and rotation3D. We extract <code style="color:var(--accent3)">yaw = rotation3D.z</code> as the main rotation (spin around vertical axis).</p>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">PYTHON · annotation_parser.py</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="cm"># annotation_parser.py</span>
+<span class="kw">import</span> json
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="kw">def</span> <span class="fn">parse_annotation_file</span>(json_path):
+    <span class="st">"""
+    Load a JSON annotation file and return a list of 7-DOF boxes.
+    Each box = [cx, cy, cz, length, width, height, yaw]
+    """</span>
+    <span class="kw">with</span> <span class="fn">open</span>(json_path) <span class="kw">as</span> f:
+        <span class="cm"># JSON file is a LIST of objects in the scene</span>
+        objects = json.<span class="fn">load</span>(f)
+
+    boxes  = []  <span class="cm"># shape will be (N, 7)</span>
+    labels = []  <span class="cm"># shape will be (N,)  — integer class id</span>
+
+    <span class="cm"># Map class names to integers</span>
+    CLASS_MAP = {<span class="st">"car"</span>: <span class="nm">0</span>, <span class="st">"pedestrian"</span>: <span class="nm">1</span>, <span class="st">"cyclist"</span>: <span class="nm">2</span>}
+
+    <span class="kw">for</span> obj <span class="kw">in</span> objects:
+        c = obj[<span class="st">"contour"</span>]
+
+        cx  = c[<span class="st">"center3D"</span>][<span class="st">"x"</span>]
+        cy  = c[<span class="st">"center3D"</span>][<span class="st">"y"</span>]
+        cz  = c[<span class="st">"center3D"</span>][<span class="st">"z"</span>]
+        l   = c[<span class="st">"size3D"</span>][<span class="st">"x"</span>]   <span class="cm"># length (along x)</span>
+        w   = c[<span class="st">"size3D"</span>][<span class="st">"y"</span>]   <span class="cm"># width  (along y)</span>
+        h   = c[<span class="st">"size3D"</span>][<span class="st">"z"</span>]   <span class="cm"># height (along z)</span>
+        yaw = c[<span class="st">"rotation3D"</span>][<span class="st">"z"</span>] <span class="cm"># yaw = rotation around Z axis</span>
+
+        boxes.<span class="fn">append</span>([cx, cy, cz, l, w, h, yaw])
+        labels.<span class="fn">append</span>(CLASS_MAP.<span class="fn">get</span>(obj.<span class="fn">get</span>(<span class="st">"class"</span>, <span class="st">"car"</span>), <span class="nm">0</span>))
+
+    <span class="kw">return</span> {
+        <span class="st">"boxes"</span>:  np.<span class="fn">array</span>(boxes,  dtype=np.float32),   <span class="cm"># (N, 7)</span>
+        <span class="st">"labels"</span>: np.<span class="fn">array</span>(labels, dtype=np.int64),     <span class="cm"># (N,)</span>
+    }</pre>
+      </div>
+
+      <h2 class="section">PyTorch Dataset Class</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">PYTHON · dataset.py</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="cm"># dataset.py</span>
+<span class="kw">import</span> open3d <span class="kw">as</span> o3d
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">import</span> torch
+<span class="kw">from</span> torch.utils.data <span class="kw">import</span> Dataset
+<span class="kw">from</span> pathlib <span class="kw">import</span> Path
+<span class="kw">from</span> annotation_parser <span class="kw">import</span> parse_annotation_file
+
+<span class="kw">class</span> <span class="fn">PointCloudDataset</span>(Dataset):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, root_dir, split=<span class="st">"train"</span>, max_points=<span class="nm">16384</span>):
+        <span class="st">"""
+        root_dir  : path to dataset/ folder
+        split     : "train" or "val"
+        max_points: subsample to this many points per scene
+        """</span>
+        self.root      = Path(root_dir)
+        self.max_pts   = max_points
+
+        <span class="cm"># Read the list of scene IDs (e.g. "scene_001")</span>
+        split_file = self.root / <span class="st">"splits"</span> / f<span class="st">"{split}.txt"</span>
+        self.scene_ids = split_file.<span class="fn">read_text</span>().<span class="fn">strip</span>().<span class="fn">splitlines</span>()
+
+    <span class="kw">def</span> <span class="fn">__len__</span>(self):
+        <span class="kw">return</span> <span class="fn">len</span>(self.scene_ids)
+
+    <span class="kw">def</span> <span class="fn">__getitem__</span>(self, idx):
+        scene_id = self.scene_ids[idx]
+
+        <span class="cm"># ── 1. Load point cloud ──────────────────────────────────</span>
+        pcd_path = self.root / <span class="st">"pointclouds"</span> / f<span class="st">"{scene_id}.pcd"</span>
+        pcd      = o3d.io.<span class="fn">read_point_cloud</span>(<span class="fn">str</span>(pcd_path))
+        points   = np.<span class="fn">asarray</span>(pcd.points, dtype=np.float32)  <span class="cm"># (921600, 3)</span>
+
+        <span class="cm"># ── 2. Subsample (random, for speed) ─────────────────────</span>
+        <span class="kw">if</span> <span class="fn">len</span>(points) > self.max_pts:
+            idx_pts = np.random.<span class="fn">choice</span>(<span class="fn">len</span>(points), self.max_pts, replace=<span class="kw">False</span>)
+            points  = points[idx_pts]
+
+        <span class="cm"># ── 3. Load annotation ───────────────────────────────────</span>
+        ann_path = self.root / <span class="st">"annotations"</span> / f<span class="st">"{scene_id}.json"</span>
+        ann      = <span class="fn">parse_annotation_file</span>(ann_path)
+
+        <span class="cm"># ── 4. Return as tensors ─────────────────────────────────</span>
+        <span class="kw">return</span> {
+            <span class="st">"points"</span>:  torch.<span class="fn">from_numpy</span>(points),        <span class="cm"># (N, 3)</span>
+            <span class="st">"boxes"</span>:   torch.<span class="fn">from_numpy</span>(ann[<span class="st">"boxes"</span>]),  <span class="cm"># (num_obj, 7)</span>
+            <span class="st">"labels"</span>:  torch.<span class="fn">from_numpy</span>(ann[<span class="st">"labels"</span>]), <span class="cm"># (num_obj,)</span>
+            <span class="st">"scene_id"</span>: scene_id
+        }</pre>
+      </div>
+
+      <div class="alert warn">
+        <span class="alert-icon">⚠️</span>
+        <p><strong>Important:</strong> Each scene can have a different number of objects, so <code style="color:var(--accent3)">boxes</code> and <code style="color:var(--accent3)">labels</code> have variable length. We handle this with a custom collate function in the next step.</p>
+      </div>
+
+      <div class="step-nav">
+        <button class="nav-btn" onclick="goTo(0)">← What is PointPillars?</button>
+        <button class="nav-btn primary" onclick="goTo(2)">DataLoader →</button>
+      </div>
+    </div>
+
+    <!-- ===== STEP 2 ===== -->
+    <div class="step-panel" id="step-2">
+      <div class="step-header">
+        <span class="step-badge">Step 03</span>
+        <h1 class="step-title">DataLoader</h1>
+      </div>
+
+      <div class="concept-box">
+        <h3>📦 What is a DataLoader?</h3>
+        <p>PyTorch's DataLoader wraps your Dataset and feeds it to the model in batches. It also handles shuffling, parallel loading with multiple CPU workers, and stacking samples into batched tensors. The tricky part here is that each scene has a different number of objects — we need a custom collate function to handle that.</p>
+      </div>
+
+      <h2 class="section">The Pillar Creation Step</h2>
+      <div class="diagram">
+        <div class="diagram-title">🔄 Point Cloud → Pillars</div>
+        <pre style="padding:0; background:none; font-size:0.76rem; color:#94a3b8;">
+  Raw Points (N, 3)                          Pillar Features (P, 32, 9)
+  ┌─────────────┐                            ┌─────────────────────────┐
+  │ x  y  z    │                            │ For each of P pillars:  │
+  │ 1.2 3.4 0.1│  ──→  Voxelize Grid ──→   │  up to 32 points, each  │
+  │ 1.3 3.4 0.2│        (0.16m cells)       │  with 9 features:       │
+  │ ...         │                            │  x, y, z,               │
+  └─────────────┘                            │  x-xc, y-yc, z-zc,     │
+                                             │  xc, yc, zc             │
+                                             └─────────────────────────┘
+  (x-xc = offset from pillar center)
+        </pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">PYTHON · pillars.py</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="cm"># pillars.py  — convert raw points into pillar format</span>
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="kw">def</span> <span class="fn">create_pillars</span>(points,
+                    voxel_size=(<span class="nm">0.16</span>, <span class="nm">0.16</span>),
+                    point_range=(-<span class="nm">50</span>, -<span class="nm">50</span>, -<span class="nm">5</span>, <span class="nm">50</span>, <span class="nm">50</span>, <span class="nm">3</span>),
+                    max_pillars=<span class="nm">12000</span>,
+                    max_pts_per_pillar=<span class="nm">32</span>):
+    <span class="st">"""
+    points: numpy array (N, 3)  [x, y, z]
+    Returns:
+        pillars      : (max_pillars, max_pts_per_pillar, 9)
+        pillar_coords: (max_pillars, 2)  [grid_x, grid_y]
+        num_pillars  : int  (how many non-empty pillars found)
+    """</span>
+    x_min, y_min, z_min, x_max, y_max, z_max = point_range
+    vx, vy = voxel_size
+
+    <span class="cm"># ── 1. Filter points to range ────────────────────────────</span>
+    mask = (
+        (points[:,<span class="nm">0</span>] >= x_min) & (points[:,<span class="nm">0</span>] < x_max) &
+        (points[:,<span class="nm">1</span>] >= y_min) & (points[:,<span class="nm">1</span>] < y_max) &
+        (points[:,<span class="nm">2</span>] >= z_min) & (points[:,<span class="nm">2</span>] < z_max)
+    )
+    points = points[mask]
+
+    <span class="cm"># ── 2. Assign each point to a grid cell ──────────────────</span>
+    grid_x = ((points[:,<span class="nm">0</span>] - x_min) / vx).<span class="fn">astype</span>(int)
+    grid_y = ((points[:,<span class="nm">1</span>] - y_min) / vy).<span class="fn">astype</span>(int)
+
+    <span class="cm"># ── 3. Group points by pillar (grid_x, grid_y) ───────────</span>
+    pillar_dict = {}
+    <span class="kw">for</span> i, (gx, gy) <span class="kw">in</span> <span class="fn">enumerate</span>(<span class="fn">zip</span>(grid_x, grid_y)):
+        key = (gx, gy)
+        <span class="kw">if</span> key <span class="kw">not in</span> pillar_dict:
+            pillar_dict[key] = []
+        <span class="kw">if</span> <span class="fn">len</span>(pillar_dict[key]) < max_pts_per_pillar:
+            pillar_dict[key].<span class="fn">append</span>(i)
+
+    <span class="cm"># ── 4. Build pillar feature tensors ──────────────────────</span>
+    num_pillars = <span class="fn">min</span>(<span class="fn">len</span>(pillar_dict), max_pillars)
+    pillars       = np.<span class="fn">zeros</span>((max_pillars, max_pts_per_pillar, <span class="nm">9</span>), dtype=np.float32)
+    pillar_coords = np.<span class="fn">zeros</span>((max_pillars, <span class="nm">2</span>), dtype=np.int32)
+
+    <span class="kw">for</span> p_idx, ((gx, gy), pt_indices) <span class="kw">in</span> <span class="fn">enumerate</span>(pillar_dict.<span class="fn">items</span>()):
+        <span class="kw">if</span> p_idx >= max_pillars:
+            <span class="kw">break</span>
+
+        pts = points[pt_indices]      <span class="cm"># (M, 3) where M ≤ 32</span>
+        xc  = pts[:,<span class="nm">0</span>].<span class="fn">mean</span>()         <span class="cm"># pillar centroid</span>
+        yc  = pts[:,<span class="nm">1</span>].<span class="fn">mean</span>()
+        zc  = pts[:,<span class="nm">2</span>].<span class="fn">mean</span>()
+
+        M = <span class="fn">len</span>(pts)
+        pillars[p_idx, :M, :<span class="nm">3</span>]  = pts            <span class="cm"># x, y, z</span>
+        pillars[p_idx, :M, <span class="nm">3</span>]   = pts[:,<span class="nm">0</span>] - xc  <span class="cm"># x offset from centroid</span>
+        pillars[p_idx, :M, <span class="nm">4</span>]   = pts[:,<span class="nm">1</span>] - yc  <span class="cm"># y offset from centroid</span>
+        pillars[p_idx, :M, <span class="nm">5</span>]   = pts[:,<span class="nm">2</span>] - zc  <span class="cm"># z offset from centroid</span>
+        pillars[p_idx, :M, <span class="nm">6</span>]   = xc              <span class="cm"># pillar center x</span>
+        pillars[p_idx, :M, <span class="nm">7</span>]   = yc              <span class="cm"># pillar center y</span>
+        pillars[p_idx, :M, <span class="nm">8</span>]   = zc              <span class="cm"># pillar center z</span>
+        pillar_coords[p_idx]     = [gx, gy]
+
+    <span class="kw">return</span> pillars, pillar_coords, num_pillars</pre>
+      </div>
+
+      <h2 class="section">Custom Collate + DataLoader</h2>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">PYTHON · dataloader.py</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="cm"># dataloader.py</span>
+<span class="kw">import</span> torch
+<span class="kw">from</span> torch.utils.data <span class="kw">import</span> DataLoader
+<span class="kw">from</span> dataset <span class="kw">import</span> PointCloudDataset
+<span class="kw">from</span> pillars <span class="kw">import</span> create_pillars
+
+<span class="kw">def</span> <span class="fn">collate_fn</span>(batch):
+    <span class="st">"""
+    Each sample has:
+      - points:  (N, 3)      — N may differ between scenes
+      - boxes:   (num_obj, 7)— num_obj differs per scene
+      - labels:  (num_obj,)
+
+    We convert points → pillars here (in the worker process).
+    boxes/labels are kept as a LIST (not stacked) because sizes differ.
+    """</span>
+    all_pillars, all_coords, all_num = [], [], []
+    all_boxes, all_labels = [], []
+
+    <span class="kw">for</span> sample <span class="kw">in</span> batch:
+        pts = sample[<span class="st">"points"</span>].<span class="fn">numpy</span>()
+        pillars, coords, n = <span class="fn">create_pillars</span>(pts)
+        all_pillars.<span class="fn">append</span>(torch.<span class="fn">from_numpy</span>(pillars))
+        all_coords.<span class="fn">append</span>(torch.<span class="fn">from_numpy</span>(coords))
+        all_num.<span class="fn">append</span>(n)
+        all_boxes.<span class="fn">append</span>(sample[<span class="st">"boxes"</span>])
+        all_labels.<span class="fn">append</span>(sample[<span class="st">"labels"</span>])
+
+    <span class="kw">return</span> {
+        <span class="st">"pillars"</span>:       torch.<span class="fn">stack</span>(all_pillars),  <span class="cm"># (B, 12000, 32, 9)</span>
+        <span class="st">"coords"</span>:        torch.<span class="fn">stack</span>(all_coords),   <span class="cm"># (B, 12000, 2)</span>
+        <span class="st">"num_pillars"</span>:   all_num,                   <span class="cm"># list of ints</span>
+        <span class="st">"gt_boxes"</span>:      all_boxes,                 <span class="cm"># list of tensors</span>
+        <span class="st">"gt_labels"</span>:     all_labels,                <span class="cm"># list of tensors</span>
+    }
+
+<span class="cm"># ── Create DataLoaders ────────────────────────────────────────</span>
+<span class="kw">def</span> <span class="fn">get_loaders</span>(root_dir, batch_size=<span class="nm">4</span>):
+    train_ds = <span class="fn">PointCloudDataset</span>(root_dir, split=<span class="st">"train"</span>)
+    val_ds   = <span class="fn">PointCloudDataset</span>(root_dir, split=<span class="st">"val"</span>)
+
+    train_loader = <span class="fn">DataLoader</span>(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=<span class="kw">True</span>,          <span class="cm"># randomise order each epoch</span>
+        num_workers=<span class="nm">4</span>,          <span class="cm"># parallel data loading</span>
+        collate_fn=collate_fn,
+        pin_memory=<span class="kw">True</span>         <span class="cm"># faster GPU transfer</span>
+    )
+
+    val_loader = <span class="fn">DataLoader</span>(
+        val_ds,
+        batch_size=batch_size,
+        shuffle=<span class="kw">False</span>,          <span class="cm"># no need to shuffle for validation</span>
+        num_workers=<span class="nm">4</span>,
+        collate_fn=collate_fn,
+        pin_memory=<span class="kw">True</span>
+    )
+
+    <span class="kw">return</span> train_loader, val_loader
+
+<span class="cm"># ── Quick test ────────────────────────────────────────────────</span>
+<span class="kw">if</span> __name__ == <span class="st">"__main__"</span>:
+    train_loader, _ = <span class="fn">get_loaders</span>(<span class="st">"./dataset"</span>)
+    batch = <span class="fn">next</span>(<span class="fn">iter</span>(train_loader))
+    <span class="fn">print</span>(<span class="st">"pillars shape:"</span>, batch[<span class="st">"pillars"</span>].shape)   <span class="cm"># (4, 12000, 32, 9)</span>
+    <span class="fn">print</span>(<span class="st">"coords shape :"</span>, batch[<span class="st">"coords"</span>].shape)    <span class="cm"># (4, 12000, 2)</span></pre>
+      </div>
+
+      <div class="step-nav">
+        <button class="nav-btn" onclick="goTo(1)">← Dataset Setup</button>
+        <button class="nav-btn primary" onclick="goTo(3)">Model Architecture →</button>
+      </div>
+    </div>
+
+    <!-- ===== STEP 3 ===== -->
+    <div class="step-panel" id="step-3">
+      <div class="step-header">
+        <span class="step-badge">Step 04</span>
+        <h1 class="step-title">Model Architecture</h1>
+      </div>
+
+      <div class="concept-box">
+        <h3>🏗️ 3 Parts of PointPillars</h3>
+        <p>PointPillars has exactly 3 modules that work in sequence. Data flows from left to right — the output of each module becomes input to the next.</p>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <div class="card-icon">1️⃣</div>
+          <div class="card-title">PillarFeatureNet</div>
+          <div class="card-desc">A small neural network that learns a 64-dim feature for each pillar. Uses a simplified PointNet internally.</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">2️⃣</div>
+          <div class="card-title">Backbone (SECOND CNN)</div>
+          <div class="card-desc">Scatters pillar features into a 2D BEV grid, then runs a fast CNN with multi-scale feature pyramids.</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">3️⃣</div>
+          <div class="card-title">Detection Head</div>
+          <div class="card-desc">For every anchor on the BEV grid, predicts: Does an object exist here? If yes, what class + box offsets?</div>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">PYTHON · model.py — Part 1: PillarFeatureNet</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="cm"># model.py</span>
+<span class="kw">import</span> torch
+<span class="kw">import</span> torch.nn <span class="kw">as</span> nn
+
+<span class="kw">class</span> <span class="fn">PillarFeatureNet</span>(nn.Module):
+    <span class="st">"""
+    Input : (B, P, 32, 9)  — batch, pillars, points, features
+    Output: (B, P, 64)     — one 64-dim vector per pillar
+    """</span>
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, in_channels=<span class="nm">9</span>, out_channels=<span class="nm">64</span>):
+        <span class="fn">super</span>().<span class="fn">__init__</span>()
+
+        <span class="cm"># Simple shared MLP (same weights applied to every point)</span>
+        self.mlp = nn.<span class="fn">Sequential</span>(
+            nn.<span class="fn">Linear</span>(in_channels, <span class="nm">64</span>),
+            nn.<span class="fn">BatchNorm1d</span>(<span class="nm">64</span>),
+            nn.<span class="fn">ReLU</span>()
+        )
+
+    <span class="kw">def</span> <span class="fn">forward</span>(self, pillars):
+        <span class="cm"># pillars: (B, P, 32, 9)</span>
+        B, P, N, C = pillars.shape
+
+        <span class="cm"># Flatten to apply linear layer to every point</span>
+        x = pillars.<span class="fn">view</span>(B * P * N, C)    <span class="cm"># (B*P*32, 9)</span>
+        x = self.mlp(x)                     <span class="cm"># (B*P*32, 64)</span>
+        x = x.<span class="fn">view</span>(B, P, N, <span class="nm">64</span>)           <span class="cm"># (B, P, 32, 64)</span>
+
+        <span class="cm"># Max-pool over points → one vector per pillar</span>
+        x, _ = x.<span class="fn">max</span>(dim=<span class="nm">2</span>)              <span class="cm"># (B, P, 64)</span>
+        <span class="kw">return</span> x</pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">PYTHON · model.py — Part 2: Scatter + Backbone</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="kw">class</span> <span class="fn">PillarScatter</span>(nn.Module):
+    <span class="st">"""
+    Places pillar features back into their (x,y) grid positions.
+    Input : pillar_feats (B, P, 64), coords (B, P, 2), grid size
+    Output: pseudo-image  (B, 64, H, W)
+    """</span>
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, grid_h, grid_w, num_features=<span class="nm">64</span>):
+        <span class="fn">super</span>().<span class="fn">__init__</span>()
+        self.H = grid_h
+        self.W = grid_w
+        self.C = num_features
+
+    <span class="kw">def</span> <span class="fn">forward</span>(self, pillar_feats, coords, num_pillars):
+        B = pillar_feats.shape[<span class="nm">0</span>]
+        bev = pillar_feats.<span class="fn">new_zeros</span>(B, self.C, self.H, self.W)
+
+        <span class="kw">for</span> b <span class="kw">in</span> <span class="fn">range</span>(B):
+            n  = num_pillars[b]
+            gx = coords[b, :n, <span class="nm">0</span>]  <span class="cm"># grid x indices</span>
+            gy = coords[b, :n, <span class="nm">1</span>]  <span class="cm"># grid y indices</span>
+            bev[b, :, gy, gx] = pillar_feats[b, :n].T  <span class="cm"># scatter</span>
+
+        <span class="kw">return</span> bev  <span class="cm"># (B, 64, H, W)</span>
+
+
+<span class="kw">class</span> <span class="fn">Backbone</span>(nn.Module):
+    <span class="st">"""
+    A simple CNN that processes the BEV pseudo-image.
+    Input : (B, 64, H, W)
+    Output: (B, 384, H/8, W/8)  — multi-scale features
+    """</span>
+    <span class="kw">def</span> <span class="fn">_block</span>(self, in_c, out_c, stride=<span class="nm">1</span>):
+        <span class="kw">return</span> nn.<span class="fn">Sequential</span>(
+            nn.<span class="fn">Conv2d</span>(in_c, out_c, <span class="nm">3</span>, stride=stride, padding=<span class="nm">1</span>, bias=<span class="kw">False</span>),
+            nn.<span class="fn">BatchNorm2d</span>(out_c),
+            nn.<span class="fn">ReLU</span>(inplace=<span class="kw">True</span>)
+        )
+
+    <span class="kw">def</span> <span class="fn">__init__</span>(self):
+        <span class="fn">super</span>().<span class="fn">__init__</span>()
+        <span class="cm"># Three downsampling blocks (stride=2 halves spatial size)</span>
+        self.block1 = nn.<span class="fn">Sequential</span>(self.<span class="fn">_block</span>(<span class="nm">64</span>,  <span class="nm">64</span>, stride=<span class="nm">2</span>),
+                                      self.<span class="fn">_block</span>(<span class="nm">64</span>,  <span class="nm">64</span>))
+        self.block2 = nn.<span class="fn">Sequential</span>(self.<span class="fn">_block</span>(<span class="nm">64</span>,  <span class="nm">128</span>, stride=<span class="nm">2</span>),
+                                      self.<span class="fn">_block</span>(<span class="nm">128</span>, <span class="nm">128</span>))
+        self.block3 = nn.<span class="fn">Sequential</span>(self.<span class="fn">_block</span>(<span class="nm">128</span>, <span class="nm">256</span>, stride=<span class="nm">2</span>),
+                                      self.<span class="fn">_block</span>(<span class="nm">256</span>, <span class="nm">256</span>))
+
+        <span class="cm"># Upsample all blocks to same resolution and concatenate</span>
+        self.up1 = nn.<span class="fn">ConvTranspose2d</span>(<span class="nm">64</span>,  <span class="nm">128</span>, <span class="nm">2</span>, stride=<span class="nm">2</span>)
+        self.up2 = nn.<span class="fn">ConvTranspose2d</span>(<span class="nm">128</span>, <span class="nm">128</span>, <span class="nm">2</span>, stride=<span class="nm">2</span>)
+        self.up3 = nn.<span class="fn">ConvTranspose2d</span>(<span class="nm">256</span>, <span class="nm">128</span>, <span class="nm">4</span>, stride=<span class="nm">4</span>)
+
+    <span class="kw">def</span> <span class="fn">forward</span>(self, x):
+        x1 = self.block1(x)
+        x2 = self.block2(x1)
+        x3 = self.block3(x2)
+
+        <span class="cm"># FPN-style: upsample and concatenate → richer features</span>
+        u1 = self.up1(x1)
+        u2 = self.up2(x2)
+        u3 = self.up3(x3)
+        <span class="kw">return</span> torch.<span class="fn">cat</span>([u1, u2, u3], dim=<span class="nm">1</span>)  <span class="cm"># (B, 384, H/2, W/2)</span></pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">PYTHON · model.py — Part 3: Detection Head + Full Model</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="kw">class</span> <span class="fn">DetectionHead</span>(nn.Module):
+    <span class="st">"""
+    For each spatial location on BEV map, predicts:
+      - cls_logits : (B, num_anchors * num_classes, H, W)
+      - box_preds  : (B, num_anchors * 7,           H, W)
+    """</span>
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, in_channels=<span class="nm">384</span>, num_anchors=<span class="nm">2</span>, num_classes=<span class="nm">3</span>):
+        <span class="fn">super</span>().<span class="fn">__init__</span>()
+        self.cls_head = nn.<span class="fn">Conv2d</span>(in_channels, num_anchors * num_classes, <span class="nm">1</span>)
+        self.box_head = nn.<span class="fn">Conv2d</span>(in_channels, num_anchors * <span class="nm">7</span>, <span class="nm">1</span>)
+        self.dir_head = nn.<span class="fn">Conv2d</span>(in_channels, num_anchors * <span class="nm">2</span>, <span class="nm">1</span>)  <span class="cm"># direction</span>
+
+    <span class="kw">def</span> <span class="fn">forward</span>(self, x):
+        <span class="kw">return</span> {
+            <span class="st">"cls"</span>: self.cls_head(x),
+            <span class="st">"box"</span>: self.box_head(x),
+            <span class="st">"dir"</span>: self.dir_head(x),
+        }
+
+
+<span class="kw">class</span> <span class="fn">PointPillars</span>(nn.Module):
+    <span class="st">"""Complete PointPillars model"""</span>
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, num_classes=<span class="nm">3</span>,
+                 grid_h=<span class="nm">625</span>, grid_w=<span class="nm">625</span>,  <span class="cm"># 100m / 0.16m ≈ 625</span>
+                 num_anchors=<span class="nm">2</span>):
+        <span class="fn">super</span>().<span class="fn">__init__</span>()
+        self.pfn      = <span class="fn">PillarFeatureNet</span>(in_channels=<span class="nm">9</span>, out_channels=<span class="nm">64</span>)
+        self.scatter  = <span class="fn">PillarScatter</span>(grid_h, grid_w, num_features=<span class="nm">64</span>)
+        self.backbone = <span class="fn">Backbone</span>()
+        self.head     = <span class="fn">DetectionHead</span>(in_channels=<span class="nm">384</span>,
+                                        num_anchors=num_anchors,
+                                        num_classes=num_classes)
+
+    <span class="kw">def</span> <span class="fn">forward</span>(self, pillars, coords, num_pillars):
+        <span class="cm"># pillars: (B, P, 32, 9)</span>
+        feats = self.pfn(pillars)               <span class="cm"># → (B, P, 64)</span>
+        bev   = self.scatter(feats, coords, num_pillars)  <span class="cm"># → (B, 64, H, W)</span>
+        bev   = self.backbone(bev)              <span class="cm"># → (B, 384, H/2, W/2)</span>
+        preds = self.head(bev)                  <span class="cm"># → dict of cls/box/dir</span>
+        <span class="kw">return</span> preds</pre>
+      </div>
+
+      <div class="step-nav">
+        <button class="nav-btn" onclick="goTo(2)">← DataLoader</button>
+        <button class="nav-btn primary" onclick="goTo(4)">Loss Calculation →</button>
+      </div>
+    </div>
+
+    <!-- ===== STEP 4 ===== -->
+    <div class="step-panel" id="step-4">
+      <div class="step-header">
+        <span class="step-badge">Step 05</span>
+        <h1 class="step-title">Loss Calculation</h1>
+      </div>
+
+      <div class="concept-box">
+        <h3>📉 What the model is learning</h3>
+        <p>The model makes predictions on thousands of anchor boxes. We compare these predictions to the ground-truth boxes and calculate 3 losses simultaneously. The total loss guides the optimizer to improve all three aspects at once.</p>
+      </div>
+
+      <h2 class="section">3 Loss Components</h2>
+      <table>
+        <tr><th>Loss</th><th>What it measures</th><th>Function</th></tr>
+        <tr><td>cls_loss</td><td>Is there an object here? Which class?</td><td>Focal Loss (handles class imbalance)</td></tr>
+        <tr><td>box_loss</td><td>How wrong are the predicted box coordinates?</td><td>SmoothL1 Loss</td></tr>
+        <tr><td>dir_loss</td><td>Is the object facing left or right?</td><td>CrossEntropy (2-class)</td></tr>
+      </table>
+
+      <div class="alert info">
+        <span class="alert-icon">ℹ️</span>
+        <p><strong>Why Focal Loss?</strong> In a BEV grid with 300×300 cells, maybe only 10 contain actual objects. If you use standard cross-entropy, the model just learns to predict "no object" everywhere and gets 99% accuracy but detects nothing. Focal Loss down-weights easy negatives so the model focuses on hard positives.</p>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">PYTHON · loss.py</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="cm"># loss.py</span>
+<span class="kw">import</span> torch
+<span class="kw">import</span> torch.nn <span class="kw">as</span> nn
+<span class="kw">import</span> torch.nn.functional <span class="kw">as</span> F
+
+<span class="kw">class</span> <span class="fn">FocalLoss</span>(nn.Module):
+    <span class="st">"""
+    Focal Loss — penalises hard/wrong predictions more.
+    alpha: balance pos/neg  (default 0.25)
+    gamma: focus parameter  (default 2.0)
+    """</span>
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, alpha=<span class="nm">0.25</span>, gamma=<span class="nm">2.0</span>):
+        <span class="fn">super</span>().<span class="fn">__init__</span>()
+        self.alpha = alpha
+        self.gamma = gamma
+
+    <span class="kw">def</span> <span class="fn">forward</span>(self, preds, targets):
+        <span class="cm"># preds  : raw logits  (any shape)</span>
+        <span class="cm"># targets: 0/1 labels  (same shape as preds)</span>
+        bce    = F.<span class="fn">binary_cross_entropy_with_logits</span>(preds, targets, reduction=<span class="st">"none"</span>)
+        pt     = torch.<span class="fn">exp</span>(-bce)                 <span class="cm"># probability of correct class</span>
+        focal  = self.alpha * ((<span class="nm">1</span> - pt) ** self.gamma) * bce
+        <span class="kw">return</span> focal.<span class="fn">mean</span>()
+
+
+<span class="kw">class</span> <span class="fn">PointPillarsLoss</span>(nn.Module):
+    <span class="st">"""
+    Combined loss for PointPillars.
+    Takes model predictions and matched ground-truth targets.
+    """</span>
+    <span class="kw">def</span> <span class="fn">__init__</span>(self):
+        <span class="fn">super</span>().<span class="fn">__init__</span>()
+        self.focal_loss = <span class="fn">FocalLoss</span>(alpha=<span class="nm">0.25</span>, gamma=<span class="nm">2.0</span>)
+        self.smooth_l1  = nn.<span class="fn">SmoothL1Loss</span>()
+        self.ce_loss    = nn.<span class="fn">CrossEntropyLoss</span>()
+
+    <span class="kw">def</span> <span class="fn">forward</span>(self, preds, targets):
+        <span class="st">"""
+        preds   : dict from model.forward()  {cls, box, dir}
+        targets : dict of matched GT targets  {cls, box, dir, pos_mask}
+        """</span>
+        pos_mask = targets[<span class="st">"pos_mask"</span>]  <span class="cm"># (B, A, H, W) — which anchors match GT</span>
+
+        <span class="cm"># ── Classification loss ───────────────────────────────────</span>
+        cls_loss = self.focal_loss(preds[<span class="st">"cls"</span>], targets[<span class="st">"cls"</span>])
+
+        <span class="cm"># ── Box regression loss (only on positive anchors) ────────</span>
+        pos_pred_box = preds[<span class="st">"box"</span>][pos_mask]    <span class="cm"># only matched anchors</span>
+        pos_tgt_box  = targets[<span class="st">"box"</span>][pos_mask]
+        box_loss     = self.smooth_l1(pos_pred_box, pos_tgt_box)  <span class="kw">if</span> pos_pred_box.<span class="fn">numel</span>() > <span class="nm">0</span> <span class="kw">else</span> torch.<span class="fn">tensor</span>(<span class="nm">0.0</span>)
+
+        <span class="cm"># ── Direction loss (only on positive anchors) ─────────────</span>
+        pos_pred_dir = preds[<span class="st">"dir"</span>][pos_mask]
+        pos_tgt_dir  = targets[<span class="st">"dir"</span>][pos_mask]
+        dir_loss     = self.ce_loss(pos_pred_dir, pos_tgt_dir)    <span class="kw">if</span> pos_pred_dir.<span class="fn">numel</span>() > <span class="nm">0</span> <span class="kw">else</span> torch.<span class="fn">tensor</span>(<span class="nm">0.0</span>)
+
+        <span class="cm"># ── Combine with weights ──────────────────────────────────</span>
+        total = <span class="nm">1.0</span> * cls_loss + <span class="nm">2.0</span> * box_loss + <span class="nm">0.2</span> * dir_loss
+
+        <span class="kw">return</span> {
+            <span class="st">"total"</span>: total,
+            <span class="st">"cls"</span>:   cls_loss.<span class="fn">item</span>(),
+            <span class="st">"box"</span>:   box_loss.<span class="fn">item</span>(),
+            <span class="st">"dir"</span>:   dir_loss.<span class="fn">item</span>(),
+        }
+
+
+<span class="cm"># ── Anchor matching (GT box → nearest anchor) ─────────────────</span>
+<span class="kw">def</span> <span class="fn">match_anchors_to_gt</span>(anchors, gt_boxes, gt_labels,
+                          pos_iou_thresh=<span class="nm">0.6</span>, neg_iou_thresh=<span class="nm">0.45</span>):
+    <span class="st">"""
+    For each GT box, find the best-matching anchor.
+    Returns target tensors with the same shape as predictions.
+    (Simplified version — production code uses vectorised 3D IoU)
+    """</span>
+    <span class="cm"># In practice, use a library like spconv or mmdet3d</span>
+    <span class="cm"># that provides optimised 3D IoU + anchor assignment</span>
+    <span class="kw">pass</span>  <span class="cm"># see training.py for integration pattern</span></pre>
+      </div>
+
+      <div class="step-nav">
+        <button class="nav-btn" onclick="goTo(3)">← Model Architecture</button>
+        <button class="nav-btn primary" onclick="goTo(5)">Training Loop →</button>
+      </div>
+    </div>
+
+    <!-- ===== STEP 5 ===== -->
+    <div class="step-panel" id="step-5">
+      <div class="step-header">
+        <span class="step-badge">Step 06</span>
+        <h1 class="step-title">Training Loop</h1>
+      </div>
+
+      <div class="concept-box">
+        <h3>🔄 The Training Cycle</h3>
+        <p>Training is an iterative loop. In each iteration we: load a batch → forward pass → compute loss → backpropagate gradients → update weights. We repeat this for many epochs until the loss converges (stops decreasing significantly).</p>
+      </div>
+
+      <div class="diagram">
+        <div class="diagram-title">🔁 One training step</div>
+        <pre style="padding:0; background:none; font-size:0.76rem; color:#94a3b8;">
+  batch → model.forward() → predictions → loss_fn() → loss.backward() → optimizer.step()
+    ↑                                                                           |
+    └───────────────────── repeat for next batch ──────────────────────────────┘
+        </pre>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">PYTHON · train.py</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="cm"># train.py</span>
+<span class="kw">import</span> torch
+<span class="kw">from</span> torch.optim <span class="kw">import</span> AdamW
+<span class="kw">from</span> torch.optim.lr_scheduler <span class="kw">import</span> OneCycleLR
+<span class="kw">from</span> model      <span class="kw">import</span> PointPillars
+<span class="kw">from</span> loss        <span class="kw">import</span> PointPillarsLoss
+<span class="kw">from</span> dataloader  <span class="kw">import</span> get_loaders
+
+<span class="kw">def</span> <span class="fn">train</span>(root_dir, num_epochs=<span class="nm">80</span>, batch_size=<span class="nm">4</span>, lr=<span class="nm">3e-4</span>):
+
+    <span class="cm"># ── Setup ─────────────────────────────────────────────────</span>
+    device = torch.<span class="fn">device</span>(<span class="st">"cuda"</span> <span class="kw">if</span> torch.cuda.<span class="fn">is_available</span>() <span class="kw">else</span> <span class="st">"cpu"</span>)
+    <span class="fn">print</span>(f<span class="st">"Training on: {device}"</span>)
+
+    model     = <span class="fn">PointPillars</span>(num_classes=<span class="nm">3</span>).<span class="fn">to</span>(device)
+    loss_fn   = <span class="fn">PointPillarsLoss</span>()
+    optimizer = <span class="fn">AdamW</span>(model.<span class="fn">parameters</span>(), lr=lr, weight_decay=<span class="nm">0.01</span>)
+
+    train_loader, val_loader = <span class="fn">get_loaders</span>(root_dir, batch_size)
+
+    <span class="cm"># OneCycleLR: warms up then decays lr — very effective</span>
+    scheduler = <span class="fn">OneCycleLR</span>(optimizer, max_lr=lr,
+                             total_steps=num_epochs * <span class="fn">len</span>(train_loader))
+
+    best_val_loss = <span class="fn">float</span>(<span class="st">"inf"</span>)
+
+    <span class="cm"># ── Epoch loop ────────────────────────────────────────────</span>
+    <span class="kw">for</span> epoch <span class="kw">in</span> <span class="fn">range</span>(num_epochs):
+        model.<span class="fn">train</span>()
+        total_loss = <span class="nm">0.0</span>
+
+        <span class="cm"># ── Batch loop ────────────────────────────────────────</span>
+        <span class="kw">for</span> step, batch <span class="kw">in</span> <span class="fn">enumerate</span>(train_loader):
+
+            <span class="cm"># 1. Move data to GPU</span>
+            pillars = batch[<span class="st">"pillars"</span>].<span class="fn">to</span>(device)      <span class="cm"># (B, P, 32, 9)</span>
+            coords  = batch[<span class="st">"coords"</span>].<span class="fn">to</span>(device)       <span class="cm"># (B, P, 2)</span>
+            n_pil   = batch[<span class="st">"num_pillars"</span>]             <span class="cm"># list of ints</span>
+
+            <span class="cm"># 2. Forward pass — get predictions</span>
+            preds = model(pillars, coords, n_pil)       <span class="cm"># dict: cls, box, dir</span>
+
+            <span class="cm"># 3. Build targets (anchor matching)</span>
+            targets = <span class="fn">build_targets</span>(preds, batch[<span class="st">"gt_boxes"</span>],
+                                      batch[<span class="st">"gt_labels"</span>], device)
+
+            <span class="cm"># 4. Compute loss</span>
+            losses = loss_fn(preds, targets)
+            loss   = losses[<span class="st">"total"</span>]
+
+            <span class="cm"># 5. Backprop</span>
+            optimizer.<span class="fn">zero_grad</span>()   <span class="cm"># clear old gradients</span>
+            loss.<span class="fn">backward</span>()          <span class="cm"># compute new gradients</span>
+            torch.nn.utils.<span class="fn">clip_grad_norm_</span>(model.<span class="fn">parameters</span>(), <span class="nm">35</span>)  <span class="cm"># prevent explosion</span>
+            optimizer.<span class="fn">step</span>()         <span class="cm"># update weights</span>
+            scheduler.<span class="fn">step</span>()         <span class="cm"># update learning rate</span>
+
+            total_loss += loss.<span class="fn">item</span>()
+
+            <span class="kw">if</span> step % <span class="nm">10</span> == <span class="nm">0</span>:
+                <span class="fn">print</span>(f<span class="st">"  [Ep {epoch+1}/{num_epochs} | step {step}]"</span>
+                      f<span class="st">" loss={loss.item():.4f}"</span>
+                      f<span class="st">" cls={losses['cls']:.3f}"</span>
+                      f<span class="st">" box={losses['box']:.3f}"</span>)
+
+        <span class="cm"># ── Validation ────────────────────────────────────────</span>
+        val_loss = <span class="fn">evaluate</span>(model, val_loader, loss_fn, device)
+        avg_train = total_loss / <span class="fn">len</span>(train_loader)
+
+        <span class="fn">print</span>(f<span class="st">"Epoch {epoch+1}: train={avg_train:.4f} | val={val_loss:.4f}"</span>)
+
+        <span class="cm"># ── Save best model ───────────────────────────────────</span>
+        <span class="kw">if</span> val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.<span class="fn">save</span>(model.<span class="fn">state_dict</span>(), <span class="st">"best_model.pth"</span>)
+            <span class="fn">print</span>(<span class="st">"  ✅ Saved best model"</span>)
+
+
+<span class="kw">def</span> <span class="fn">evaluate</span>(model, loader, loss_fn, device):
+    <span class="st">"""Run one epoch on validation set, return average loss."""</span>
+    model.<span class="fn">eval</span>()
+    total = <span class="nm">0.0</span>
+    <span class="kw">with</span> torch.<span class="fn">no_grad</span>():  <span class="cm"># no gradients needed for validation</span>
+        <span class="kw">for</span> batch <span class="kw">in</span> loader:
+            pillars = batch[<span class="st">"pillars"</span>].<span class="fn">to</span>(device)
+            coords  = batch[<span class="st">"coords"</span>].<span class="fn">to</span>(device)
+            preds   = model(pillars, coords, batch[<span class="st">"num_pillars"</span>])
+            targets = <span class="fn">build_targets</span>(preds, batch[<span class="st">"gt_boxes"</span>],
+                                      batch[<span class="st">"gt_labels"</span>], device)
+            total += loss_fn(preds, targets)[<span class="st">"total"</span>].<span class="fn">item</span>()
+    <span class="kw">return</span> total / <span class="fn">len</span>(loader)
+
+
+<span class="kw">if</span> __name__ == <span class="st">"__main__"</span>:
+    <span class="fn">train</span>(root_dir=<span class="st">"./dataset"</span>, num_epochs=<span class="nm">80</span>, batch_size=<span class="nm">4</span>)</pre>
+      </div>
+
+      <h2 class="section">What to watch during training</h2>
+      <table>
+        <tr><th>Metric</th><th>Good sign</th><th>Bad sign</th></tr>
+        <tr><td>train_loss</td><td>Steadily decreasing</td><td>Spikes or stays flat → reduce LR</td></tr>
+        <tr><td>val_loss</td><td>Follows train_loss</td><td>Val > train by big margin → overfitting</td></tr>
+        <tr><td>cls_loss</td><td>Drops below 0.3</td><td>Stuck at ~0.7 → check class imbalance</td></tr>
+        <tr><td>box_loss</td><td>Drops below 0.2</td><td>Not decreasing → check anchor sizes</td></tr>
+      </table>
+
+      <div class="step-nav">
+        <button class="nav-btn" onclick="goTo(4)">← Loss Calculation</button>
+        <button class="nav-btn primary" onclick="goTo(6)">Prediction →</button>
+      </div>
+    </div>
+
+    <!-- ===== STEP 6 ===== -->
+    <div class="step-panel" id="step-6">
+      <div class="step-header">
+        <span class="step-badge">Step 07</span>
+        <h1 class="step-title">Prediction on New Data</h1>
+      </div>
+
+      <div class="concept-box">
+        <h3>🔮 Inference Pipeline</h3>
+        <p>At test time there are no labels — you just load a raw .pcd file, run it through the model, and get back a list of predicted bounding boxes. The extra step is <strong>NMS (Non-Maximum Suppression)</strong> — the model predicts hundreds of overlapping boxes, NMS keeps only the best one per object.</p>
+      </div>
+
+      <div class="pipeline">
+        <div class="pipe-step highlight">
+          <div class="ps-icon">📄</div>
+          <div class="ps-name">new.pcd</div>
+          <div class="ps-dim">raw file</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="ps-icon">🗂️</div>
+          <div class="ps-name">Pillars</div>
+          <div class="ps-dim">preprocess</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="ps-icon">🧠</div>
+          <div class="ps-name">Model</div>
+          <div class="ps-dim">forward()</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step">
+          <div class="ps-icon">🗑️</div>
+          <div class="ps-name">NMS</div>
+          <div class="ps-dim">filter</div>
+        </div>
+        <div class="pipe-arrow">→</div>
+        <div class="pipe-step highlight">
+          <div class="ps-icon">📦</div>
+          <div class="ps-name">Final Boxes</div>
+          <div class="ps-dim">[x,y,z,l,w,h,θ]</div>
+        </div>
+      </div>
+
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">PYTHON · predict.py</span>
+          <button class="copy-btn" onclick="copyCode(this)">copy</button>
+        </div>
+        <pre><span class="cm"># predict.py</span>
+<span class="kw">import</span> torch
+<span class="kw">import</span> open3d <span class="kw">as</span> o3d
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="kw">from</span> model   <span class="kw">import</span> PointPillars
+<span class="kw">from</span> pillars <span class="kw">import</span> create_pillars
+
+CLASS_NAMES = [<span class="st">"car"</span>, <span class="st">"pedestrian"</span>, <span class="st">"cyclist"</span>]
+
+<span class="kw">def</span> <span class="fn">load_model</span>(checkpoint_path, num_classes=<span class="nm">3</span>, device=<span class="st">"cpu"</span>):
+    model = <span class="fn">PointPillars</span>(num_classes=num_classes)
+    state = torch.<span class="fn">load</span>(checkpoint_path, map_location=device)
+    model.<span class="fn">load_state_dict</span>(state)
+    model.<span class="fn">eval</span>()        <span class="cm"># switch to inference mode</span>
+    model.<span class="fn">to</span>(device)
+    <span class="kw">return</span> model
+
+
+<span class="kw">def</span> <span class="fn">nms_bev</span>(boxes, scores, iou_threshold=<span class="nm">0.1</span>):
+    <span class="st">"""
+    Simple 2D NMS on BEV boxes.
+    boxes  : (N, 7)  [cx, cy, cz, l, w, h, yaw]
+    scores : (N,)
+    Returns indices of kept boxes.
+    """</span>
+    <span class="kw">if</span> <span class="fn">len</span>(boxes) == <span class="nm">0</span>:
+        <span class="kw">return</span> []
+
+    order  = scores.<span class="fn">argsort</span>()[::-<span class="nm">1</span>]  <span class="cm"># sort by confidence</span>
+    keep   = []
+
+    <span class="kw">while</span> <span class="fn">len</span>(order) > <span class="nm">0</span>:
+        i = order[<span class="nm">0</span>]
+        keep.<span class="fn">append</span>(i)
+
+        <span class="cm"># Compute BEV IoU with remaining boxes</span>
+        ious = <span class="fn">bev_iou</span>(boxes[i], boxes[order[<span class="nm">1</span>:]])
+        mask = ious < iou_threshold       <span class="cm"># keep boxes with low overlap</span>
+        order = order[<span class="nm">1</span>:][mask]
+
+    <span class="kw">return</span> keep
+
+
+<span class="kw">def</span> <span class="fn">predict</span>(pcd_path, model, device=<span class="st">"cpu"</span>,
+             conf_threshold=<span class="nm">0.3</span>, nms_threshold=<span class="nm">0.1</span>):
+    <span class="st">"""
+    Run detection on a single .pcd file.
+    Returns list of dicts: {box, class_name, score}
+    """</span>
+    <span class="cm"># ── 1. Load + preprocess ─────────────────────────────────</span>
+    pcd    = o3d.io.<span class="fn">read_point_cloud</span>(pcd_path)
+    points = np.<span class="fn">asarray</span>(pcd.points, dtype=np.float32)
+
+    pillars, coords, n_pil = <span class="fn">create_pillars</span>(points)
+
+    pillars_t = torch.<span class="fn">from_numpy</span>(pillars).<span class="fn">unsqueeze</span>(<span class="nm">0</span>).<span class="fn">to</span>(device)  <span class="cm"># (1, P, 32, 9)</span>
+    coords_t  = torch.<span class="fn">from_numpy</span>(coords).<span class="fn">unsqueeze</span>(<span class="nm">0</span>).<span class="fn">to</span>(device)   <span class="cm"># (1, P, 2)</span>
+
+    <span class="cm"># ── 2. Forward pass ──────────────────────────────────────</span>
+    <span class="kw">with</span> torch.<span class="fn">no_grad</span>():
+        preds = model(pillars_t, coords_t, [n_pil])
+
+    <span class="cm"># ── 3. Decode predictions ────────────────────────────────</span>
+    cls_logits = preds[<span class="st">"cls"</span>][<span class="nm">0</span>]        <span class="cm"># (A*num_classes, H, W)</span>
+    box_preds  = preds[<span class="st">"box"</span>][<span class="nm">0</span>]        <span class="cm"># (A*7, H, W)</span>
+
+    cls_scores = torch.<span class="fn">sigmoid</span>(cls_logits)  <span class="cm"># convert logits → probabilities</span>
+    scores, cls_ids = cls_scores.<span class="fn">max</span>(dim=<span class="nm">0</span>)
+
+    <span class="cm"># Flatten spatial dims</span>
+    scores  = scores.<span class="fn">flatten</span>().<span class="fn">cpu</span>().<span class="fn">numpy</span>()
+    cls_ids = cls_ids.<span class="fn">flatten</span>().<span class="fn">cpu</span>().<span class="fn">numpy</span>()
+    boxes   = <span class="fn">decode_boxes</span>(box_preds)    <span class="cm"># convert offsets → absolute coords</span>
+
+    <span class="cm"># ── 4. Filter by confidence ──────────────────────────────</span>
+    mask   = scores > conf_threshold
+    boxes  = boxes[mask]
+    scores = scores[mask]
+    cls_ids= cls_ids[mask]
+
+    <span class="cm"># ── 5. NMS — remove duplicate boxes ─────────────────────</span>
+    keep   = <span class="fn">nms_bev</span>(boxes, scores, iou_threshold=nms_threshold)
+    boxes  = boxes[keep]
+    scores = scores[keep]
+    cls_ids= cls_ids[keep]
+
+    <span class="cm"># ── 6. Format results ────────────────────────────────────</span>
+    results = []
+    <span class="kw">for</span> i <span class="kw">in</span> <span class="fn">range</span>(<span class="fn">len</span>(boxes)):
+        results.<span class="fn">append</span>({
+            <span class="st">"box"</span>:        boxes[i].<span class="fn">tolist</span>(),      <span class="cm"># [cx,cy,cz,l,w,h,yaw]</span>
+            <span class="st">"class_name"</span>: CLASS_NAMES[cls_ids[i]],
+            <span class="st">"score"</span>:      <span class="fn">float</span>(scores[i])
+        })
+
+    <span class="kw">return</span> results
+
+
+<span class="cm"># ── Run it ────────────────────────────────────────────────────</span>
+<span class="kw">if</span> __name__ == <span class="st">"__main__"</span>:
+    model   = <span class="fn">load_model</span>(<span class="st">"best_model.pth"</span>)
+    results = <span class="fn">predict</span>(<span class="st">"test_scene.pcd"</span>, model)
+
+    <span class="fn">print</span>(f<span class="st">"Detected {len(results)} objects:"</span>)
+    <span class="kw">for</span> r <span class="kw">in</span> results:
+        <span class="fn">print</span>(f<span class="st">"  {r['class_name']:12s}  score={r['score']:.2f}"</span>
+              f<span class="st">"  box={[round(v,2) for v in r['box']]}"</span>)</pre>
+      </div>
+
+      <h2 class="section">Recommended Next Steps</h2>
+      <div class="cards">
+        <div class="card">
+          <div class="card-icon">🚀</div>
+          <div class="card-title">Use MMDetection3D</div>
+          <div class="card-desc">Production implementation with all optimisations. Start with their PointPillars config and fine-tune on your data.</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">📊</div>
+          <div class="card-title">Evaluate with 3D mAP</div>
+          <div class="card-desc">Use IoU threshold 0.5 for cars, 0.25 for pedestrians. Compare AP per class.</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🔍</div>
+          <div class="card-title">Visualise in Open3D</div>
+          <div class="card-desc">Draw predicted boxes as line sets on the point cloud to visually verify results.</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">🎯</div>
+          <div class="card-title">Data Augmentation</div>
+          <div class="card-desc">Random flip, rotation, scaling on point clouds dramatically improves accuracy.</div>
+        </div>
+      </div>
+
+      <div class="alert tip">
+        <span class="alert-icon">✅</span>
+        <p><strong>Pro tip:</strong> If you have fewer than 1,000 annotated scenes, fine-tune a model pretrained on the KITTI dataset. You'll get much better results than training from scratch. MMDetection3D provides pretrained weights you can download.</p>
+      </div>
+
+      <div class="step-nav">
+        <button class="nav-btn" onclick="goTo(5)">← Training Loop</button>
+        <button class="nav-btn primary" onclick="goTo(0)">↑ Back to Start</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  const STEPS = 7;
+  let current = 0;
+
+  function goTo(idx) {
+    document.querySelectorAll('.step-panel').forEach((p, i) => {
+      p.classList.toggle('active', i === idx);
+    });
+    document.querySelectorAll('.nav-item').forEach((n, i) => {
+      n.classList.toggle('active', i === idx);
+    });
+    current = idx;
+
+    const pct = ((idx + 1) / STEPS * 100).toFixed(1);
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressCount').textContent = `${idx + 1} / ${STEPS}`;
+
+    document.querySelector('.main').scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function copyCode(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    const text = pre.innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'copied!';
+      setTimeout(() => btn.textContent = 'copy', 1800);
+    });
+  }
+</script>
+</body>
+</html>
