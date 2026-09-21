@@ -1,0 +1,11 @@
+The transformer is a neural network architecture.
+Transformers process sequences using attention.
+Attention allows a model to understand relationships between tokens.
+A language model predicts the next token.
+GPT is a decoder only transformer.
+The model learns patterns from data.
+Deep learning requires optimization.
+The transformer architecture is powerful for language modeling.
+Language models generate text one token at a time.
+The model receives a context and predicts what comes next.
+Let's build some AI product.
